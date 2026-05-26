@@ -1,0 +1,157 @@
+# Render Blueprint — deploys all 5 services to Render.com
+#
+# After connecting this repo in Render ("New > Blueprint"), the dashboard will
+# prompt for every env var marked `sync: false`. Fill them in:
+#
+#   MONGODB_URI        (one per service — see comments below)
+#   JWT_SECRET         (paste the SAME value into user-service AND order-service)
+#   OPENAI_API_KEY     (order-service)
+#   RAZORPAY_KEY_ID    (order-service)
+#   RAZORPAY_KEY_SECRET (order-service)
+#   RESTAURANT_SERVICE_URL / DELIVERY_SERVICE_URL  (order-service — paste the
+#     other services' Render URLs after first deploy)
+#   ORDER_SERVICE_URL  (delivery-service)
+#   NEXT_PUBLIC_*_URL  (frontend — paste each service's Render URL)
+#   NEXT_PUBLIC_RAZORPAY_KEY_ID  (frontend — same as RAZORPAY_KEY_ID)
+#
+# MongoDB Atlas connection string template — replace <password>:
+#
+#   mongodb+srv://foodadmin:<password>@food-delivery.msufmxu.mongodb.net/<DB_NAME>
+#
+#   user-service       -> /food_delivery_users
+#   restaurant-service -> /food_delivery_restaurants
+#   order-service      -> /food_delivery_orders
+#   delivery-service   -> /food_delivery_deliveries
+#
+# Render injects $PORT into each web service automatically; every service in
+# this repo binds to `process.env.PORT` already, so no PORT var is needed here.
+
+services:
+  # ---------------------------------------------------------------------------
+  # 1. User Service — auth + profile
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: user-service
+    env: node
+    plan: free
+    rootDir: services/user-service
+    buildCommand: npm install
+    startCommand: node src/index.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        # mongodb+srv://foodadmin:<password>@food-delivery.msufmxu.mongodb.net/food_delivery_users
+        sync: false
+      - key: JWT_SECRET
+        # Must match the JWT_SECRET set on order-service.
+        sync: false
+
+  # ---------------------------------------------------------------------------
+  # 2. Restaurant Service — restaurants + menu + auto-seeder
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: restaurant-service
+    env: node
+    plan: free
+    rootDir: services/restaurant-service
+    buildCommand: npm install
+    startCommand: node src/index.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        # mongodb+srv://foodadmin:<password>@food-delivery.msufmxu.mongodb.net/food_delivery_restaurants
+        sync: false
+
+  # ---------------------------------------------------------------------------
+  # 3. Order Service — orders, payments, recommendations, Socket.IO
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: order-service
+    env: node
+    plan: free
+    rootDir: services/order-service
+    buildCommand: npm install
+    startCommand: node src/index.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        # mongodb+srv://foodadmin:<password>@food-delivery.msufmxu.mongodb.net/food_delivery_orders
+        sync: false
+      - key: JWT_SECRET
+        # Must match the JWT_SECRET set on user-service.
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RESTAURANT_SERVICE_URL
+        # e.g. https://restaurant-service-XXXX.onrender.com
+        sync: false
+      - key: DELIVERY_SERVICE_URL
+        # e.g. https://delivery-service-XXXX.onrender.com
+        sync: false
+
+  # ---------------------------------------------------------------------------
+  # 4. Delivery Service — driver simulator
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: delivery-service
+    env: node
+    plan: free
+    rootDir: services/delivery-service
+    buildCommand: npm install
+    startCommand: node src/index.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        # mongodb+srv://foodadmin:<password>@food-delivery.msufmxu.mongodb.net/food_delivery_deliveries
+        sync: false
+      - key: ORDER_SERVICE_URL
+        # e.g. https://order-service-XXXX.onrender.com
+        sync: false
+
+  # ---------------------------------------------------------------------------
+  # 5. Frontend — Next.js 14 (App Router)
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: frontend
+    env: node
+    plan: free
+    rootDir: frontend
+    # `npm run build` is required so .next/ exists before `next start`.
+    buildCommand: npm install && npm run build
+    # `npx next start` (no -p flag) reads $PORT from Render; `npm run start`
+    # in package.json is `next start -p 3000`, which would ignore Render's
+    # assigned PORT and fail healthchecks.
+    startCommand: npx next start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_USER_SERVICE_URL
+        # https://user-service-XXXX.onrender.com
+        sync: false
+      - key: NEXT_PUBLIC_RESTAURANT_SERVICE_URL
+        # https://restaurant-service-XXXX.onrender.com
+        sync: false
+      - key: NEXT_PUBLIC_ORDER_SERVICE_URL
+        # https://order-service-XXXX.onrender.com
+        sync: false
+      - key: NEXT_PUBLIC_DELIVERY_SERVICE_URL
+        # https://delivery-service-XXXX.onrender.com
+        sync: false
+      - key: NEXT_PUBLIC_SOCKET_URL
+        # Socket.IO lives in order-service: https://order-service-XXXX.onrender.com
+        sync: false
+      - key: NEXT_PUBLIC_RAZORPAY_KEY_ID
+        # Same value as RAZORPAY_KEY_ID on order-service.
+        sync: false
